@@ -47,9 +47,8 @@ prompt_neutral = PromptTemplate(
 
 # Pydantic parser including neutral
 class Parser(BaseModel):
-    sentiment: Literal["positive", "negative", "neutral"] = Field(
-        description="Sentiment extracted from text"
-    )
+    sentiment:Literal["positive", "negative", "neutral"] = Field(
+        description="Sentiment extracted from text")
 
 parser1 = PydanticOutputParser(pydantic_object=Parser)
 parser2 = StrOutputParser()

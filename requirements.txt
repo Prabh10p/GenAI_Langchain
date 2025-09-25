@@ -1,4 +1,5 @@
 langchain-huggingface
+langchain-community
 huggingface-hub
 transformers
 python-dotenv
