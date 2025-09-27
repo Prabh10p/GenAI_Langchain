@@ -1,15 +1,16 @@
-# Make a application that take multiple thing like  
-# text or folder or Pdf to read from it and then generating a Summary and Quiz n that for practise
-
-from langchain_huggingface import HuggingFaceEndpoint,ChatHuggingFace
-from langchain_core.prompts import PromptTemplate
+from langchain_huggingface import ChatHuggingFace, HuggingFaceEmbeddings, HuggingFaceEndpoint
 from langchain_core.output_parsers import StrOutputParser
-from langchain_community.document_loaders import PyPDFLoader,TextLoader, DirectoryLoader, WebBaseLoader
-from langchain_core.runnables import RunnableParallel
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableParallel, RunnableLambda, RunnablePassthrough
+from langchain_community.vectorstores import FAISS
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 from dotenv import load_dotenv
 import streamlit as st
 
 load_dotenv()
+
+# HuggingFace LLM
 llm = HuggingFaceEndpoint(
     repo_id="google/gemma-2-9b-it",
     task="conversational"
@@ -17,65 +18,64 @@ llm = HuggingFaceEndpoint(
 model = ChatHuggingFace(llm=llm)
 parser = StrOutputParser()
 
+# Streamlit UI
+st.header("🎥 YouTube Video Summarizer")
+user_input = st.text_input("Paste YouTube Video Link")
 
+# Extract video ID
+if "v=" in user_input:
+    video_id = user_input.split("v=")[-1].split("&")[0]
+else:
+    video_id = user_input
 
-prompt1 = PromptTemplate(
-    template = "Summarize the following text deeply /n {input_text}",
-    input_variables=["input_text"]
+# Transcript
+try:
+    transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=["en", "hi"])
+    transcript = " ".join([chunk["text"] for chunk in transcript_list])
+except TranscriptsDisabled:
+    st.error("⚠️ No captions available for this video.")
+    transcript = ""
+
+# Split into chunks
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=30)
+chunks = splitter.create_documents([transcript])
+
+# Embeddings + Vector DB
+embedding = HuggingFaceEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2")
+vector_store = FAISS.from_documents(chunks, embedding)
+
+retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+
+# Format docs
+def format_docs(retrieved_docs):
+    return " ".join(doc.page_content for doc in retrieved_docs)
+
+# Prompt
+prompt = PromptTemplate(
+    input_variables=["context", "question"],
+    template="""
+    You are an AI assistant that summarizes YouTube videos.
+
+    Context:
+    {context}
+
+    Question:
+    {question}
+
+    Answer in clear, concise paragraphs:
+    """
 )
 
+# Chains
+parallel_chain = RunnableParallel({
+    "context": retriever | RunnableLambda(format_docs),
+    "question": RunnablePassthrough()
+})
 
+final_chain = parallel_chain | prompt | model | parser
 
-prompt2 =PromptTemplate(
-    template = "Generate best learnable {text_inp} MCQ Quiz questions from following text/n {input_text}",
-    input_variables=["input_text"]
-)
-
-
-
-chain1 = prompt1 |model| parser
-
-chain2 = prompt2|model|parser
-
-
-
-st.header("Summariser and Quiz Generator Macchine")
-
-
-input_type = st.radio(
-    "Choose your input type:",
-    ("Text", "PDF", "Folder")
-)
-
-if input_type =="Text":
-    text = st.text_area("Which text you want you Summarise?")
-    loader = TextLoader(text)
-
-
-if input_type =="PDF":
-    text = st.file_uploader("Upload you Pdf to Summarise?",type=["pdf"])
-    loader = PyPDFLoader(text)
-
-
-if input_type =="Folder":
-    text = st.file_uploader("Upload your Folder you want to Summarise?")
-    loader = DirectoryLoader(text)
-
-
-if "summary_generated" not in st.session_state:
-    st.session_state.summary_generated = False
-
-
+# Run
 if st.button("Summarize"):
-    result = chain1.invoke({'input_text':text})
-    st.subheader("Summary")
-    st.write(result)
-    st.session_state.summary_generated=True
-
-
-if  st.session_state.summary_generated:
-    text_inp = st.selectbox("How many MCQS you want to generate?",[5,10,15,20,25,30,35,40,50])
-    if st.button("Generate Quiz"):
-        result = chain2.invoke({'text_inp':text_inp,'input_text':text})
-        st.subheader("Quiz")
-        st.write(result)
+    summary = final_chain.invoke("Summarize this video")
+    st.write("## 📝 Summary")
+    st.write(summary)

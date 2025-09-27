@@ -4,9 +4,11 @@ langchain-experimental
 huggingface-hub
 transformers
 python-dotenv
+youtube-transcript-api
 wikipedia
 arxiv
 pandas
+faiss-cpu
 numpy
 streamlit
 chromadb
