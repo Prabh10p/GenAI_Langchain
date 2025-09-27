@@ -1,8 +1,12 @@
 langchain-huggingface
 langchain-community
+langchain-experimental
 huggingface-hub
 transformers
 python-dotenv
+wikipedia
+arxiv
 pandas
 numpy
 streamlit
+chromadb
