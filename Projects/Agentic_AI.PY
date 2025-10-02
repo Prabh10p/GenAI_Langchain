@@ -17,6 +17,7 @@ llm = HuggingFaceEndpoint(
 model = ChatHuggingFace(llm=llm)
 search_tool = DuckDuckGoSearchRun()
 api_key = "6950e3ee5b5ed3332f1ce3aacf43ffbe"
+
 @tool
 def get_weather(city:str) -> str:
    """This function should return the weather for the city"""
