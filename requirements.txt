@@ -11,4 +11,5 @@ pandas
 faiss-cpu
 numpy
 streamlit
+ddgs
 chromadb
